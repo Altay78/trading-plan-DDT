@@ -1,0 +1,287 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090f24;
+  --surface: #101936;
+  --surface-2: #16213f;
+  --border: #243156;
+  --foreground: #f1f4fb;
+  --muted: #94a1c4;
+  --accent: #4f83ff;
+  --accent-foreground: #ffffff;
+  --danger: #fb7185;
+  --warning: #fbbf24;
+  --cx: 50%;
+  --cy: 50%;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* { border-color: var(--border); }
+
+body {
+  background:
+    radial-gradient(1100px 560px at 82% -12%, rgba(79, 131, 255, 0.14), transparent),
+    radial-gradient(900px 500px at 0% 0%, rgba(79, 131, 255, 0.06), transparent),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Cursor spotlight */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--cx) var(--cy),
+    rgba(79, 131, 255, 0.055),
+    transparent 50%
+  );
+  transition: background 0.05s linear;
+}
+
+/* SaaS grid background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 161, 196, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 161, 196, 0.05) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(120% 70% at 50% -10%, #000 25%, transparent 72%);
+  mask-image: radial-gradient(120% 70% at 50% -10%, #000 25%, transparent 72%);
+}
+
+/* ===== Inputs ===== */
+.input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 131, 255, 0.22);
+}
+.input::placeholder { color: var(--muted); }
+
+/* ===== Cards ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Hover lift + glow */
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(79, 131, 255, 0.35);
+  box-shadow:
+    0 16px 40px -16px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(79, 131, 255, 0.12),
+    0 0 30px -8px rgba(79, 131, 255, 0.18);
+}
+
+/* Glow card (login) */
+.card-glow {
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 24px 60px -12px rgba(0, 0, 0, 0.7),
+    0 0 80px -20px rgba(79, 131, 255, 0.2);
+}
+
+/* ===== Chrome logo ===== */
+.chrome-text {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%, #e8eef8 12%, #aab4c8 26%, #7e889e 40%,
+    #ffffff 50%, #5b6577 56%, #9aa4ba 72%, #dce3ef 88%, #ffffff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-size: 100% 220%;
+  background-position: 0 14%;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.18)) drop-shadow(0 2px 7px rgba(0,0,0,0.5));
+  animation: chromeShine 7s ease-in-out infinite;
+}
+@keyframes chromeShine {
+  0%, 100% { background-position: 0 14%; }
+  50% { background-position: 0 86%; }
+}
+
+/* ===== Stagger animation ===== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-stagger > * {
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.animate-stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.animate-stagger > *:nth-child(3) { animation-delay: 0.16s; }
+.animate-stagger > *:nth-child(4) { animation-delay: 0.22s; }
+.animate-stagger > *:nth-child(5) { animation-delay: 0.28s; }
+.animate-stagger > *:nth-child(6) { animation-delay: 0.34s; }
+.animate-stagger > *:nth-child(7) { animation-delay: 0.4s; }
+
+/* ===== Shimmer on cards (hover) ===== */
+@keyframes shimmer {
+  0% { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(200%) skewX(-12deg); }
+}
+.card-hover {
+  position: relative;
+  overflow: hidden;
+}
+.card-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  transform: translateX(-100%) skewX(-12deg);
+  pointer-events: none;
+}
+.card-hover:hover::after {
+  animation: shimmer 0.7s ease;
+}
+
+/* ===== Buttons ===== */
+@keyframes sheen {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  60%, 100% { transform: translateX(260%) skewX(-18deg); }
+}
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%; width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: translateX(-130%) skewX(-18deg);
+}
+.btn-primary:hover {
+  box-shadow: 0 0 20px -4px rgba(79, 131, 255, 0.5);
+}
+.btn-primary:hover::after { animation: sheen 0.9s ease; }
+.btn-primary:active { transform: scale(0.98); }
+
+/* ===== Slider ===== */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%; height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%, var(--accent) var(--pct, 50%),
+    var(--surface-2) var(--pct, 50%), var(--surface-2) 100%
+  );
+  outline: none;
+  cursor: pointer;
+  transition: background 0.05s linear;
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45), 0 0 10px rgba(79,131,255,0.3);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.range::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.range:active::-webkit-slider-thumb {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 6px rgba(79, 131, 255, 0.2);
+}
+.range::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  transition: transform 0.12s ease;
+}
+.range:active::-moz-range-thumb { transform: scale(1.25); }
+
+/* ===== Progress bar ===== */
+.progress-fill { transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* ===== Forecast chart ===== */
+@keyframes fcDraw { to { stroke-dashoffset: 0; } }
+.fc-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: fcDraw 1.2s ease-out forwards;
+}
+@keyframes fcRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 0.85; transform: translateY(0); }
+}
+.fc-bar {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fcRise 0.45s ease-out both;
+}
+@keyframes fcFade { from { opacity: 0; } to { opacity: 1; } }
+.fc-area { animation: fcFade 1.1s ease-out both; }
+.fc-dot { animation: fcFade 1.4s ease-out both; }
+
+/* ===== Verdict reveal ===== */
+@keyframes verdictPop {
+  from { opacity: 0; transform: scale(0.94) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.verdict-in { animation: verdictPop 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* ===== Glow badge ===== */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(79,131,255,0.3); }
+  50% { box-shadow: 0 0 18px rgba(79,131,255,0.6); }
+}
+.glow-pulse { animation: glowPulse 2.5s ease-in-out infinite; }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-stagger > *, .chrome-text, .btn-primary::after,
+  .verdict-in, .fc-line, .fc-bar, .fc-area, .fc-dot {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+  }
+}
