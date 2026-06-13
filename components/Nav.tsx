@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth";
+import { springSnappy, springSoft, springBouncy, EASE_OUT } from "@/lib/motion";
 import Logo from "./Logo";
 
 type NavLink = { href: string; label: string; short: string; icon: ReactNode };
@@ -54,11 +55,22 @@ export default function Nav() {
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4">
-          <Link href="/" className="flex items-baseline gap-2">
-            <Logo className="chrome-text text-xl" />
-            <span className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-muted sm:inline">
+          <Link href="/" className="group flex items-baseline gap-2">
+            <motion.span
+              className="inline-flex"
+              whileHover={{ scale: 1.04, rotate: -1.5 }}
+              whileTap={{ scale: 0.97 }}
+              transition={springSnappy}
+            >
+              <Logo className="chrome-text text-xl" />
+            </motion.span>
+            <motion.span
+              className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-muted sm:inline"
+              animate={{ opacity: 1 }}
+              whileHover={{ opacity: 1 }}
+            >
               {isMentor ? "mentor" : "membre"}
-            </span>
+            </motion.span>
           </Link>
 
           <div className="flex items-center gap-2">
@@ -67,17 +79,40 @@ export default function Nav() {
               {LINKS.map((l) => {
                 const active = isActive(pathname, l.href);
                 return (
-                  <Link key={l.href} href={l.href} className="relative px-3 py-1.5 text-sm">
-                    {active && (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="group relative px-3 py-1.5 text-sm"
+                  >
+                    {active ? (
                       <motion.span
                         layoutId="nav-pill"
-                        className="absolute inset-0 rounded-lg bg-surface-2"
-                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        className="absolute inset-0 rounded-lg bg-surface-2 shadow-[0_0_0_1px_rgba(79,131,255,0.18),0_6px_18px_-6px_rgba(79,131,255,0.45)]"
+                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      >
+                        <motion.span
+                          className="absolute inset-0 rounded-lg bg-accent/10"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={springSoft}
+                        />
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        className="absolute inset-0 rounded-lg bg-surface-2/0"
+                        initial={false}
+                        whileHover={{ backgroundColor: "rgba(22,33,63,0.55)" }}
+                        transition={{ duration: 0.2, ease: EASE_OUT }}
                       />
                     )}
-                    <span className={`relative transition-colors ${active ? "text-foreground" : "text-muted hover:text-foreground"}`}>
+                    <motion.span
+                      className={`relative inline-block transition-colors ${active ? "text-foreground" : "text-muted group-hover:text-foreground"}`}
+                      whileHover={{ y: -1 }}
+                      whileTap={{ y: 0, scale: 0.96 }}
+                      transition={springSnappy}
+                    >
                       {l.label}
-                    </span>
+                    </motion.span>
                   </Link>
                 );
               })}
@@ -90,9 +125,11 @@ export default function Nav() {
                 </span>
                 <motion.button
                   onClick={signOut}
-                  className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted transition hover:text-foreground"
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
+                  className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:border-accent/40 hover:text-foreground"
+                  initial={false}
+                  whileHover={{ scale: 1.05, y: -1 }}
+                  whileTap={{ scale: 0.95, y: 0 }}
+                  transition={springSnappy}
                 >
                   Déconnexion
                 </motion.button>
@@ -114,20 +151,34 @@ export default function Nav() {
                 className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px]"
               >
                 {active && (
-                  <motion.span
-                    layoutId="mobile-nav-indicator"
-                    className="absolute top-0 h-0.5 w-8 rounded-full bg-accent"
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                  />
+                  <>
+                    <motion.span
+                      layoutId="mobile-nav-indicator"
+                      className="absolute top-0 h-0.5 w-8 rounded-full bg-accent shadow-[0_0_10px_2px_rgba(79,131,255,0.7)]"
+                      transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                    />
+                    <motion.span
+                      layoutId="mobile-nav-glow"
+                      className="pointer-events-none absolute top-1.5 h-9 w-9 rounded-full bg-accent/15 blur-md"
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                    />
+                  </>
                 )}
                 <motion.span
-                  className={active ? "text-accent" : "text-muted"}
-                  animate={{ scale: active ? 1.1 : 1 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className={`relative ${active ? "text-accent" : "text-muted"}`}
+                  animate={{ scale: active ? 1.12 : 1, y: active ? -1 : 0 }}
+                  whileTap={{ scale: 0.86 }}
+                  transition={active ? springBouncy : springSnappy}
                 >
                   <Icon>{l.icon}</Icon>
                 </motion.span>
-                <span className={active ? "text-accent" : "text-muted"}>{l.short}</span>
+                <motion.span
+                  className={active ? "text-accent" : "text-muted"}
+                  animate={{ opacity: active ? 1 : 0.85 }}
+                  transition={springSnappy}
+                >
+                  {l.short}
+                </motion.span>
               </Link>
             );
           })}

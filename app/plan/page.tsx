@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ASSET_CATALOG,
   EMOTIONS,
@@ -17,6 +18,15 @@ import { classifyRiskProfile, projectTrades } from "@/lib/calc";
 import { usePlan } from "@/lib/usePlan";
 import { Badge, Chip, Field, NumberInput, Section } from "@/components/ui";
 import { Slider } from "@/components/Slider";
+import {
+  EASE_OUT,
+  springSnappy,
+  springSoft,
+  springBouncy,
+  staggerContainer,
+  staggerItem,
+} from "@/lib/motion";
+import { AnimatedNumber, MagneticButton } from "@/components/motion";
 
 const PROJECTION_TRADES = 30;
 
@@ -34,11 +44,24 @@ function toggle<T>(arr: T[], value: T): T[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
+// Slide+fade variants for step transitions. `direction` = 1 forward, -1 back.
+const stepVariants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir > 0 ? 36 : -36 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir > 0 ? -36 : 36 }),
+};
+
 export default function PlanPage() {
   const { plan, loaded, save, update, reset } = usePlan();
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [customInput, setCustomInput] = useState("");
+  // Track navigation direction so the slide animation knows which way to go.
+  const [direction, setDirection] = useState(1);
+  const goToStep = (next: number) => {
+    setDirection(next >= step ? 1 : -1);
+    setStep(next);
+  };
 
   if (!loaded) return <p className="text-sm text-muted">Chargement…</p>;
 
@@ -93,28 +116,91 @@ export default function PlanPage() {
       <div className="card p-4">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium">
-            Étape {step + 1} / {STEPS.length}
+            Étape{" "}
+            <AnimatedNumber value={step + 1} durationMs={420} className="tabular-nums" locale="" />{" "}
+            / {STEPS.length}
           </span>
-          <span className="text-muted">{current.title}</span>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={current.id}
+              className="text-muted"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.22, ease: EASE_OUT }}
+            >
+              {current.title}
+            </motion.span>
+          </AnimatePresence>
         </div>
-        <div className="mt-3 flex gap-1.5">
-          {STEPS.map((s, i) => (
-            <button
-              key={s.id}
-              onClick={() => setStep(i)}
-              aria-label={s.title}
-              className={`h-1.5 flex-1 rounded-full transition ${
-                i <= step ? "bg-accent" : "bg-surface-2"
-              }`}
-            />
-          ))}
+        {/* Continuous fill that springs across the whole track. */}
+        <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <motion.div
+            className="absolute inset-y-0 left-0 rounded-full bg-accent"
+            initial={false}
+            animate={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}
+            transition={springSoft}
+          />
+        </div>
+        {/* Clickable step dots with spring pop on the active one. */}
+        <div className="mt-3 flex items-center justify-between">
+          {STEPS.map((s, i) => {
+            const reached = i <= step;
+            const active = i === step;
+            return (
+              <motion.button
+                key={s.id}
+                onClick={() => goToStep(i)}
+                aria-label={s.title}
+                aria-current={active ? "step" : undefined}
+                className="relative grid h-7 w-7 place-items-center rounded-full"
+                whileTap={{ scale: 0.85 }}
+                whileHover={{ scale: 1.12 }}
+                transition={springSnappy}
+              >
+                <motion.span
+                  className={`block rounded-full ${reached ? "bg-accent" : "border border-border bg-surface-2"}`}
+                  initial={false}
+                  animate={{
+                    width: active ? 11 : 7,
+                    height: active ? 11 : 7,
+                    boxShadow: active
+                      ? "0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent)"
+                      : "0 0 0 0px transparent",
+                  }}
+                  transition={springBouncy}
+                />
+              </motion.button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Contenu d'étape — slide directionnel forward/back.
+          Le wrapper absorbe le fade-up CSS de .animate-stagger (nth-child),
+          l'AnimatePresence interne gère le slide directionnel sans conflit. */}
+      <div>
+      <AnimatePresence mode="wait" custom={direction} initial={false}>
+        <motion.div
+          key={current.id}
+          custom={direction}
+          variants={stepVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.32, ease: EASE_OUT }}
+        >
 
       {/* Étape : Capital */}
       {current.id === "capital" && (
         <Section title="Capital & identité" description="On part de ton capital — tout le reste en découle.">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <motion.div
+            className="grid gap-4 sm:grid-cols-3"
+            variants={staggerContainer(0.07)}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div variants={staggerItem}>
             <Field label="Nom du membre">
               <input
                 className="input"
@@ -123,9 +209,13 @@ export default function PlanPage() {
                 onChange={(e) => update("memberName", e.target.value)}
               />
             </Field>
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <Field label="Capital du compte">
               <NumberInput value={plan.accountSize} min={0} suffix={plan.currency} onChange={(v) => update("accountSize", v)} />
             </Field>
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <Field label="Devise">
               <select className="input" value={plan.currency} onChange={(e) => update("currency", e.target.value)}>
                 <option value="€">€ (EUR)</option>
@@ -133,24 +223,36 @@ export default function PlanPage() {
                 <option value="£">£ (GBP)</option>
               </select>
             </Field>
-          </div>
+            </motion.div>
+          </motion.div>
         </Section>
       )}
 
       {/* Étape : Money management */}
       {current.id === "mm" && (
         <Section title="Money management" description="Le socle. Le risque par trade et le RR minimum priment sur tout le reste.">
-          <div className="grid gap-6 rounded-xl border border-border bg-surface-2 p-4 sm:grid-cols-3">
+          <motion.div
+            className="grid gap-6 rounded-xl border border-border bg-surface-2 p-4 sm:grid-cols-3"
+            variants={staggerContainer(0.08)}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div variants={staggerItem}>
             <Field label="Risque par trade" hint="% du capital perdu si SL touché — jusqu'à 15% en compte propre">
               <Slider value={plan.riskPerTradePct} min={0.25} max={15} step={0.25} format={(v) => `${v}%`} onChange={(v) => update("riskPerTradePct", v)} />
             </Field>
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <Field label="Risk:Reward minimum" hint="Gain visé ÷ risque">
               <Slider value={plan.minRiskReward} min={1} max={5} step={0.1} format={(v) => `${v.toFixed(1)} : 1`} onChange={(v) => update("minRiskReward", v)} />
             </Field>
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <Field label="Win rate attendu" hint="Sert au forecast de l'accueil">
               <Slider value={plan.expectedWinRate} min={30} max={80} step={1} format={(v) => `${v}%`} onChange={(v) => update("expectedWinRate", v)} />
             </Field>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Limites & objectifs — choix de l'unité */}
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -174,20 +276,41 @@ export default function PlanPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <motion.div
+            className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            variants={staggerContainer(0.05)}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div variants={staggerItem}>
             <Field label="Nombre de trades max / jour" hint="Au-delà → on arrête">
               <NumberInput value={plan.maxTradesPerDay} min={1} step={1} onChange={(v) => update("maxTradesPerDay", v)} />
             </Field>
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Gain max / jour" hint="Objectif atteint → arrête, c'est gagné" pct={plan.maxDailyGainPct} onChange={(v) => update("maxDailyGainPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Perte max / jour" hint="Limite bloquante — stop la journée" pct={plan.maxDailyLossPct} onChange={(v) => update("maxDailyLossPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Objectif de gain / semaine" pct={plan.maxWeeklyGainPct} onChange={(v) => update("maxWeeklyGainPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Limite de perte / semaine" hint="Stop la semaine si atteinte" pct={plan.maxWeeklyLossPct} onChange={(v) => update("maxWeeklyLossPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Objectif mensuel" hint="Ta cible de gain sur le mois" pct={plan.monthlyTargetPct} onChange={(v) => update("monthlyTargetPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} step={1} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <MmLimit label="Risque ouvert max" hint="Cumul sur toutes les positions ouvertes" pct={plan.maxOpenRiskPct} onChange={(v) => update("maxOpenRiskPct", v)} unit={plan.mmDisplayUnit} accountSize={plan.accountSize} currency={plan.currency} />
+            </motion.div>
+            <motion.div variants={staggerItem}>
             <Field label="Drawdown max (kill-switch)" hint="Toujours en % — on arrête tout">
               <NumberInput value={plan.maxAccountDrawdownPct} min={0} step={1} suffix="%" onChange={(v) => update("maxAccountDrawdownPct", v)} />
             </Field>
-          </div>
+            </motion.div>
+          </motion.div>
         </Section>
       )}
 
@@ -197,13 +320,20 @@ export default function PlanPage() {
           title="Psychologie — états bloquants"
           description="Sélectionne les états dans lesquels tu t'interdis de trader. Au check pré-trade, ils bloqueront l'entrée."
         >
-          <div className="flex flex-wrap gap-2">
+          <motion.div
+            className="flex flex-wrap gap-2"
+            variants={staggerContainer(0.035)}
+            initial="hidden"
+            animate="visible"
+          >
             {EMOTIONS.map((e) => (
-              <Chip key={e} tone="danger" active={plan.blockingEmotions.includes(e)} onClick={() => update("blockingEmotions", toggle(plan.blockingEmotions, e))}>
-                {e}
-              </Chip>
+              <motion.span key={e} variants={staggerItem} className="inline-flex">
+                <Chip tone="danger" active={plan.blockingEmotions.includes(e)} onClick={() => update("blockingEmotions", toggle(plan.blockingEmotions, e))}>
+                  {e}
+                </Chip>
+              </motion.span>
             ))}
-          </div>
+          </motion.div>
         </Section>
       )}
 
@@ -213,33 +343,46 @@ export default function PlanPage() {
           title="Confirmations d'entrée"
           description="Les signaux que tu exiges avant d'entrer. Au check pré-trade, il faudra en réunir le minimum — sinon le trade est refusé."
         >
-          <div className="flex flex-wrap gap-2">
+          <motion.div
+            className="flex flex-wrap gap-2"
+            variants={staggerContainer(0.035)}
+            initial="hidden"
+            animate="visible"
+          >
             {ENTRY_CONDITIONS.map((c) => (
-              <Chip
-                key={c.key}
-                active={plan.enabledConditions.includes(c.key)}
-                onClick={() => update("enabledConditions", toggle(plan.enabledConditions, c.key) as EntryConditionKey[])}
-              >
-                {c.label}
-              </Chip>
+              <motion.span key={c.key} variants={staggerItem} className="inline-flex">
+                <Chip
+                  active={plan.enabledConditions.includes(c.key)}
+                  onClick={() => update("enabledConditions", toggle(plan.enabledConditions, c.key) as EntryConditionKey[])}
+                >
+                  {c.label}
+                </Chip>
+              </motion.span>
             ))}
-          </div>
+          </motion.div>
 
           <div className="mt-5">
             <div className="mb-2 text-sm font-medium">Autre confirmation</div>
             {plan.customConditions.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
-                {plan.customConditions.map((c) => (
-                  <span
-                    key={c}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent/15 px-3 py-1.5 text-sm text-accent"
-                  >
-                    {c}
-                    <button onClick={() => removeCustom(c)} className="text-accent/60 transition hover:text-accent" aria-label="Retirer">
-                      ✕
-                    </button>
-                  </span>
-                ))}
+                <AnimatePresence initial={false}>
+                  {plan.customConditions.map((c) => (
+                    <motion.span
+                      key={c}
+                      layout
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={springBouncy}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent/15 px-3 py-1.5 text-sm text-accent"
+                    >
+                      {c}
+                      <button onClick={() => removeCustom(c)} className="text-accent/60 transition hover:text-accent" aria-label="Retirer">
+                        ✕
+                      </button>
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
             <div className="flex max-w-md gap-2">
@@ -278,13 +421,20 @@ export default function PlanPage() {
       {/* Étape : Sessions */}
       {current.id === "sessions" && (
         <Section title="Sessions & filtre news">
-          <div className="flex flex-wrap gap-2">
+          <motion.div
+            className="flex flex-wrap gap-2"
+            variants={staggerContainer(0.05)}
+            initial="hidden"
+            animate="visible"
+          >
             {SESSIONS.map((s) => (
-              <Chip key={s.key} active={plan.sessions.includes(s.key)} onClick={() => update("sessions", toggle(plan.sessions, s.key))}>
-                {s.label} <span className="opacity-60">· {s.window}</span>
-              </Chip>
+              <motion.span key={s.key} variants={staggerItem} className="inline-flex">
+                <Chip active={plan.sessions.includes(s.key)} onClick={() => update("sessions", toggle(plan.sessions, s.key))}>
+                  {s.label} <span className="opacity-60">· {s.window}</span>
+                </Chip>
+              </motion.span>
             ))}
-          </div>
+          </motion.div>
           <p className="mt-2 text-xs text-muted">Horaires indicatifs (heure de Paris).</p>
           <div className="mt-5 max-w-xs">
             <Field label="Fenêtre filtre news" hint="Ne pas trader X min avant/après une news high-impact">
@@ -300,80 +450,133 @@ export default function PlanPage() {
           <Section title="Actifs" description={`Choisis jusqu'à ${MAX_ASSETS} actifs — reste focus sur ce que tu maîtrises.`}>
             <div className="mb-4 flex items-center gap-2 text-sm">
               <span className="text-muted">Sélectionnés :</span>
-              {assets.length ? (
-                assets.map((a) => (
-                  <span key={a} className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">{a}</span>
-                ))
-              ) : (
-                <span className="text-xs text-muted">aucun</span>
-              )}
-              <span className="ml-auto text-xs text-muted">{assets.length}/{MAX_ASSETS}</span>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {assets.length ? (
+                  assets.map((a) => (
+                    <motion.span
+                      key={a}
+                      layout
+                      initial={{ opacity: 0, scale: 0.6, y: -2 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      transition={springBouncy}
+                      className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent"
+                    >
+                      {a}
+                    </motion.span>
+                  ))
+                ) : (
+                  <motion.span
+                    key="none"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="text-xs text-muted"
+                  >
+                    aucun
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              <span className="ml-auto text-xs text-muted tabular-nums">
+                <AnimatedNumber value={assets.length} durationMs={400} locale="" />/{MAX_ASSETS}
+              </span>
             </div>
             <div className="space-y-4">
-              {ASSET_CATALOG.map((group) => (
+              {ASSET_CATALOG.map((group, gi) => (
                 <div key={group.category}>
                   <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{group.category}</div>
-                  <div className="flex flex-wrap gap-2">
+                  <motion.div
+                    className="flex flex-wrap gap-2"
+                    variants={staggerContainer(0.03, gi * 0.05)}
+                    initial="hidden"
+                    animate="visible"
+                  >
                     {group.assets.map((a) => {
                       const selected = assets.includes(a);
                       const full = assets.length >= MAX_ASSETS;
                       return (
-                        <Chip key={a} active={selected} disabled={!selected && full} onClick={() => selectAsset(a)}>
-                          {a}
-                        </Chip>
+                        <motion.span key={a} variants={staggerItem} className="inline-flex">
+                          <Chip active={selected} disabled={!selected && full} onClick={() => selectAsset(a)}>
+                            {a}
+                          </Chip>
+                        </motion.span>
                       );
                     })}
-                  </div>
+                  </motion.div>
                 </div>
               ))}
             </div>
           </Section>
 
           <Section title="Indices à surveiller" description="Contexte macro. On te conseille selon tes actifs.">
-            {suggested.length > 0 && (
-              <div className="mb-4 rounded-xl border border-accent/40 bg-accent/10 p-4">
-                <div className="mb-2 text-sm font-medium text-accent">Conseillés selon tes actifs</div>
-                <div className="space-y-2">
-                  {suggested.map((s) => {
-                    const on = plan.watchIndices.includes(s.key);
-                    return (
-                      <div key={s.key} className="flex items-start gap-3">
-                        <button
-                          onClick={() => update("watchIndices", toggle(plan.watchIndices, s.key))}
-                          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
-                            on ? "border-accent bg-accent text-accent-foreground" : "border-accent/50 text-accent"
-                          }`}
-                        >
-                          {on ? "✓ " : "+ "}{s.key}
-                        </button>
-                        <span className="text-xs text-muted">{s.reason}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
+            <AnimatePresence initial={false}>
+              {suggested.length > 0 && (
+                <motion.div
+                  key="suggested"
+                  layout
+                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                  transition={springSoft}
+                  className="mb-4 rounded-xl border border-accent/40 bg-accent/10 p-4"
+                >
+                  <div className="mb-2 text-sm font-medium text-accent">Conseillés selon tes actifs</div>
+                  <motion.div className="space-y-2" variants={staggerContainer(0.05)} initial="hidden" animate="visible">
+                    {suggested.map((s) => {
+                      const on = plan.watchIndices.includes(s.key);
+                      return (
+                        <motion.div key={s.key} variants={staggerItem} className="flex items-start gap-3">
+                          <motion.button
+                            onClick={() => update("watchIndices", toggle(plan.watchIndices, s.key))}
+                            whileTap={{ scale: 0.92 }}
+                            transition={springSnappy}
+                            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                              on ? "border-accent bg-accent text-accent-foreground" : "border-accent/50 text-accent"
+                            }`}
+                          >
+                            {on ? "✓ " : "+ "}{s.key}
+                          </motion.button>
+                          <span className="text-xs text-muted">{s.reason}</span>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <motion.div className="space-y-2" variants={staggerContainer(0.04)} initial="hidden" animate="visible">
               {WATCH_INDICES.map((idx) => {
                 const active = plan.watchIndices.includes(idx.key);
                 return (
-                  <button
+                  <motion.button
                     key={idx.key}
                     type="button"
+                    variants={staggerItem}
                     onClick={() => update("watchIndices", toggle(plan.watchIndices, idx.key))}
-                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                    whileTap={{ scale: 0.99 }}
+                    transition={springSnappy}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
                       active ? "border-accent/50 bg-accent/10" : "border-border bg-surface-2"
                     }`}
                   >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border text-xs ${active ? "border-accent bg-accent text-accent-foreground" : "border-border text-transparent"}`}>✓</span>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors ${active ? "border-accent bg-accent" : "border-border"}`}>
+                      <motion.span
+                        className="text-xs text-accent-foreground"
+                        initial={false}
+                        animate={{ scale: active ? 1 : 0, opacity: active ? 1 : 0 }}
+                        transition={springBouncy}
+                      >
+                        ✓
+                      </motion.span>
+                    </span>
                     <span className="flex-1">
                       <span className="text-sm font-medium">{idx.label}</span>
                       <span className="ml-2 text-xs text-muted">{idx.note}</span>
                     </span>
-                  </button>
+                  </motion.button>
                 );
               })}
-            </div>
+            </motion.div>
           </Section>
         </div>
       )}
@@ -381,17 +584,21 @@ export default function PlanPage() {
       {/* Étape : Récap & profil */}
       {current.id === "recap" && <Recap plan={plan} />}
 
+        </motion.div>
+      </AnimatePresence>
+      </div>
+
       {/* Navigation */}
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
+        <MagneticButton
+          onClick={() => goToStep(Math.max(0, step - 1))}
           disabled={step === 0}
-          className="rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition hover:text-foreground disabled:opacity-30"
+          className="rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-30"
         >
           ← Précédent
-        </button>
+        </MagneticButton>
         {isLast ? (
-          <button
+          <MagneticButton
             onClick={() => {
               save(plan); // garantit la persistance du plan (exists = true)
               router.push("/");
@@ -399,14 +606,14 @@ export default function PlanPage() {
             className="btn-primary rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
           >
             Terminer ✓
-          </button>
+          </MagneticButton>
         ) : (
-          <button
-            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+          <MagneticButton
+            onClick={() => goToStep(Math.min(STEPS.length - 1, step + 1))}
             className="btn-primary rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
           >
             Suivant →
-          </button>
+          </MagneticButton>
         )}
       </div>
     </div>
@@ -461,13 +668,27 @@ function Recap({ plan }: { plan: TradingPlan }) {
   return (
     <div className="space-y-6">
       <Section title="Ton profil de trader" description="Déduit automatiquement de ton plan (risque, RR, confirmations, fréquence).">
-        <div className={`rounded-xl border p-5 ${tone}`}>
+        <motion.div
+          className={`rounded-xl border p-5 ${tone}`}
+          initial={{ opacity: 0, scale: 0.97, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={springSoft}
+        >
           <div className="flex items-center gap-3">
             <Badge tone={profile.tone}>{profile.label}</Badge>
-            <span className="text-xs text-muted">score {profile.score}</span>
+            <span className="text-xs text-muted">
+              score <AnimatedNumber value={profile.score} durationMs={650} locale="" className="tabular-nums" />
+            </span>
           </div>
-          <p className="mt-3 text-sm text-foreground">{profile.summary}</p>
-        </div>
+          <motion.p
+            className="mt-3 text-sm text-foreground"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.12 }}
+          >
+            {profile.summary}
+          </motion.p>
+        </motion.div>
       </Section>
       <Projection plan={plan} />
     </div>
@@ -485,26 +706,35 @@ function Projection({ plan }: { plan: TradingPlan }) {
       title="Projection & rentabilité"
       description={`Calculé depuis ton capital, ton risque par trade et ton RR cible (${plan.minRiskReward}). Risque fixe par trade, hors frais/spread.`}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-border bg-surface-2 p-4">
+      <motion.div
+        className="grid gap-3 sm:grid-cols-2"
+        variants={staggerContainer(0.1)}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div variants={staggerItem} className="rounded-xl border border-border bg-surface-2 p-4">
           <div className="text-xs text-muted">Risque par trade</div>
           <div className="mt-1 text-xl font-semibold">
-            {Math.round(riskAmount).toLocaleString("fr-FR")} {plan.currency}
+            <AnimatedNumber value={Math.round(riskAmount)} suffix={` ${plan.currency}`} />
           </div>
           <div className="mt-0.5 text-xs text-muted">
             {plan.riskPerTradePct}% de {plan.accountSize.toLocaleString("fr-FR")} {plan.currency}
           </div>
-        </div>
-        <div className="rounded-xl border border-accent/40 bg-accent/10 p-4">
+        </motion.div>
+        <motion.div variants={staggerItem} className="rounded-xl border border-accent/40 bg-accent/10 p-4">
           <div className="text-xs text-muted">Win rate d&apos;équilibre — seuil de rentabilité (RR {plan.minRiskReward})</div>
           <div className="mt-1 text-xl font-semibold text-accent">
-            {breakEven !== null ? `${Math.round(breakEven * 100)}%` : "—"}
+            {breakEven !== null ? (
+              <AnimatedNumber value={Math.round(breakEven * 100)} suffix="%" locale="" />
+            ) : (
+              "—"
+            )}
           </div>
           <div className="mt-0.5 text-xs text-muted">
             C&apos;est le taux de réussite à partir duquel ton système gagne de l&apos;argent.
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {breakEven !== null && (
         <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-surface-2 p-3 text-xs">
@@ -527,12 +757,12 @@ function Projection({ plan }: { plan: TradingPlan }) {
               <th className="py-2 pl-3 text-right font-medium">Capital final</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody variants={staggerContainer(0.04)} initial="hidden" animate="visible">
             {rows.map((r) => {
               const t = r.isBreakEven ? "text-muted" : r.pnl >= 0 ? "text-accent" : "text-danger";
               const sign = (n: number) => (n > 0 ? "+" : n < 0 ? "−" : "");
               return (
-                <tr key={r.winRate} className="border-b border-border/60 last:border-0">
+                <motion.tr key={r.winRate} variants={staggerItem} className="border-b border-border/60 last:border-0">
                   <td className="py-2.5 pr-3">
                     <span className="font-medium">{Math.round(r.winRate * 100)}%</span>
                     {r.isBreakEven && (
@@ -554,10 +784,10 @@ function Projection({ plan }: { plan: TradingPlan }) {
                       {sign(r.pnlPct)}{Math.abs(r.pnlPct).toFixed(1)}%
                     </div>
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
 

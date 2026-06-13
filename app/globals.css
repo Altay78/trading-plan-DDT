@@ -90,6 +90,18 @@ body::before {
 }
 .input::placeholder { color: var(--muted); }
 
+/* NumberInput focus micro-lift (motion pass): adds a faint upward nudge +
+   stronger accent glow on top of the base .input focus ring. */
+.num-input {
+  transition: border-color 0.15s, box-shadow 0.18s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.num-input:focus {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 3px rgba(79, 131, 255, 0.22),
+    0 6px 18px -10px rgba(79, 131, 255, 0.55);
+}
+
 /* ===== Cards ===== */
 .card {
   background: var(--surface);
@@ -276,12 +288,188 @@ body::before {
 }
 .glow-pulse { animation: glowPulse 2.5s ease-in-out infinite; }
 
+/* ============================================================
+ * Premium-motion layer — shared utilities (added by motion pass).
+ * Every keyframe below is neutralized in the reduced-motion block.
+ * ============================================================ */
+
+/* ----- Aurora / floating orb drift -----
+   A soft blue blob that drifts slowly. Drop an empty <span class="aurora-orb">
+   behind hero content (position the parent relative, give it overflow-hidden). */
+@keyframes auroraDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(6%, -4%, 0) scale(1.08); }
+  66%  { transform: translate3d(-5%, 5%, 0) scale(0.96); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+.aurora-orb {
+  position: absolute;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(60px);
+  opacity: 0.5;
+  background: radial-gradient(circle at 50% 50%, rgba(79, 131, 255, 0.45), transparent 65%);
+  animation: auroraDrift 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ----- Soft float (gentle vertical hover) ----- */
+@keyframes softFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float { animation: softFloat 5.5s ease-in-out infinite; will-change: transform; }
+
+/* ----- Text sheen (slow accent gradient slide across a heading) -----
+   Apply to a heading; text becomes a moving blue→white→blue gradient. */
+@keyframes textSheen {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.text-sheen {
+  background-image: linear-gradient(
+    100deg,
+    var(--foreground) 0%, var(--foreground) 35%,
+    #9fc0ff 48%, var(--accent) 52%, #9fc0ff 56%,
+    var(--foreground) 70%, var(--foreground) 100%
+  );
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textSheen 6s linear infinite;
+}
+
+/* ----- Rotating conic gradient border helper (CSS-only variant) -----
+   Wrap content: <div class="conic-border"><div class="conic-border-inner">…</div></div>
+   The blue accent sweeps around the edge. (For a JS-controlled version use
+   the <GradientBorder/> component.) */
+@property --conic-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes conicSpin {
+  to { --conic-angle: 360deg; }
+}
+.conic-border {
+  position: relative;
+  border-radius: 1rem;
+  padding: 1px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    conic-gradient(
+      from var(--conic-angle),
+      transparent 0%,
+      rgba(79, 131, 255, 0.05) 18%,
+      rgba(79, 131, 255, 0.85) 42%,
+      var(--accent) 50%,
+      rgba(79, 131, 255, 0.85) 58%,
+      rgba(79, 131, 255, 0.05) 82%,
+      transparent 100%
+    );
+  animation: conicSpin 6s linear infinite;
+}
+.conic-border-inner {
+  position: relative;
+  z-index: 1;
+  border-radius: calc(1rem - 1px);
+  background: var(--surface);
+  height: 100%;
+}
+
+/* ----- Pulse ring (expanding accent halo, e.g. live/status dot) -----
+   Put on a positioned element; the ring radiates from its center. */
+@keyframes pulseRing {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.pulse-ring {
+  position: relative;
+}
+.pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(79, 131, 255, 0.5);
+  background: rgba(79, 131, 255, 0.25);
+  animation: pulseRing 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  pointer-events: none;
+}
+
+/* ----- Shimmer skeleton (loading placeholder) ----- */
+@keyframes skeletonSweep {
+  0% { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--surface-2);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(148, 161, 196, 0.10) 40%,
+    rgba(148, 161, 196, 0.16) 50%,
+    rgba(148, 161, 196, 0.10) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  border-radius: 0.625rem;
+  animation: skeletonSweep 1.4s ease-in-out infinite;
+}
+
+/* ----- Larger stagger cascade (up to 12 children, longer tail) ----- */
+.animate-stagger-lg > * {
+  animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-stagger-lg > *:nth-child(1)  { animation-delay: 0.05s; }
+.animate-stagger-lg > *:nth-child(2)  { animation-delay: 0.10s; }
+.animate-stagger-lg > *:nth-child(3)  { animation-delay: 0.15s; }
+.animate-stagger-lg > *:nth-child(4)  { animation-delay: 0.20s; }
+.animate-stagger-lg > *:nth-child(5)  { animation-delay: 0.25s; }
+.animate-stagger-lg > *:nth-child(6)  { animation-delay: 0.30s; }
+.animate-stagger-lg > *:nth-child(7)  { animation-delay: 0.35s; }
+.animate-stagger-lg > *:nth-child(8)  { animation-delay: 0.40s; }
+.animate-stagger-lg > *:nth-child(9)  { animation-delay: 0.45s; }
+.animate-stagger-lg > *:nth-child(10) { animation-delay: 0.50s; }
+.animate-stagger-lg > *:nth-child(11) { animation-delay: 0.55s; }
+.animate-stagger-lg > *:nth-child(12) { animation-delay: 0.60s; }
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .animate-stagger > *, .chrome-text, .btn-primary::after,
-  .verdict-in, .fc-line, .fc-bar, .fc-area, .fc-dot {
+  .verdict-in, .fc-line, .fc-bar, .fc-area, .fc-dot,
+  .animate-stagger-lg > *, .aurora-orb, .float, .text-sheen,
+  .conic-border, .pulse-ring, .pulse-ring::before, .skeleton {
     animation: none !important;
     stroke-dashoffset: 0 !important;
     opacity: 1 !important;
+    transform: none !important;
+  }
+  /* Keep gradient-text readable without the moving sheen */
+  .text-sheen {
+    color: var(--foreground) !important;
+    -webkit-text-fill-color: var(--foreground) !important;
+    background-image: none !important;
+  }
+  /* Static accent ring instead of the rotating conic */
+  .conic-border {
+    background: rgba(79, 131, 255, 0.4) !important;
+  }
+  /* Skeleton becomes a flat surface (still visible as a placeholder) */
+  .skeleton {
+    background-image: none !important;
+  }
+  /* No focus lift under reduced motion (keep the glow ring only) */
+  .num-input:focus {
+    transform: none !important;
   }
 }
