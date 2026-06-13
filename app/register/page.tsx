@@ -16,9 +16,10 @@ const orbs = [
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export default function LoginPage() {
-  const { session, signIn } = useAuth();
+export default function RegisterPage() {
+  const { session, signUp } = useAuth();
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,55 +32,37 @@ export default function LoginPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) return;
+    if (!name.trim() || !email.trim() || !password) return;
     setLoading(true);
     setError(null);
-    const { error } = await signIn(email.trim(), password);
+    const { error } = await signUp(email.trim(), password, name.trim());
     setLoading(false);
     if (error) {
       setError(error);
     } else {
       setSuccess(true);
-      setTimeout(() => router.replace("/"), 600);
+      setTimeout(() => router.replace("/"), 1200);
     }
   };
 
   return (
     <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4">
-      {/* Floating background orbs */}
       {orbs.map((o, i) => (
         <motion.div
           key={i}
           className="pointer-events-none absolute rounded-full blur-3xl"
-          style={{
-            width: o.w,
-            height: o.h,
-            left: o.x,
-            top: o.y,
-            background: o.color,
-          }}
-          animate={{
-            x: [0, 24, -18, 8, 0],
-            y: [0, -32, 16, -8, 0],
-            scale: [1, 1.12, 0.94, 1.06, 1],
-          }}
-          transition={{
-            duration: o.dur,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: o.delay,
-          }}
+          style={{ width: o.w, height: o.h, left: o.x, top: o.y, background: o.color }}
+          animate={{ x: [0, 24, -18, 8, 0], y: [0, -32, 16, -8, 0], scale: [1, 1.12, 0.94, 1.06, 1] }}
+          transition={{ duration: o.dur, repeat: Infinity, ease: "easeInOut", delay: o.delay }}
         />
       ))}
 
-      {/* Card */}
       <motion.div
         className="card-glow relative z-10 w-full max-w-sm overflow-hidden rounded-2xl p-8"
         initial={{ opacity: 0, y: 48, scale: 0.94 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       >
-        {/* Animated accent border via pseudo-element trick (doesn't cover content) */}
         <motion.div
           className="pointer-events-none absolute -inset-px rounded-2xl"
           style={{ zIndex: -1 }}
@@ -91,7 +74,6 @@ export default function LoginPage() {
           }} />
         </motion.div>
 
-        {/* Logo block */}
         <motion.div
           className="mb-8 flex flex-col items-center text-center"
           initial={{ opacity: 0, y: -10 }}
@@ -108,7 +90,7 @@ export default function LoginPage() {
             <Logo className="chrome-text relative text-6xl" />
           </div>
           <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.28em] text-muted">
-            Plan &amp; discipline
+            Créer mon compte
           </p>
         </motion.div>
 
@@ -128,7 +110,8 @@ export default function LoginPage() {
               >
                 ✓
               </motion.div>
-              <p className="text-sm text-muted">Connexion réussie…</p>
+              <p className="font-semibold">Compte créé !</p>
+              <p className="text-sm text-muted">Redirection…</p>
             </motion.div>
           ) : (
             <motion.form
@@ -139,6 +122,17 @@ export default function LoginPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
+              <motion.div initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.45, duration: 0.5, ease: EASE }}>
+                <label className="mb-1.5 block text-xs font-medium text-muted">Prénom / pseudo</label>
+                <input
+                  required
+                  className="input"
+                  placeholder="Ex. Julie"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </motion.div>
+
               <motion.div initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55, duration: 0.5, ease: EASE }}>
                 <label className="mb-1.5 block text-xs font-medium text-muted">Email</label>
                 <input
@@ -153,11 +147,12 @@ export default function LoginPage() {
               </motion.div>
 
               <motion.div initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.65, duration: 0.5, ease: EASE }}>
-                <label className="mb-1.5 block text-xs font-medium text-muted">Mot de passe</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted">Mot de passe (min. 8 car.)</label>
                 <input
                   type="password"
                   required
-                  autoComplete="current-password"
+                  minLength={8}
+                  autoComplete="new-password"
                   className="input"
                   placeholder="••••••••"
                   value={password}
@@ -194,22 +189,23 @@ export default function LoginPage() {
                         animate={{ rotate: 360 }}
                         transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
                       />
-                      Connexion…
+                      Création…
                     </span>
                   ) : (
-                    "Se connecter"
+                    "Créer mon compte"
                   )}
                 </motion.button>
               </motion.div>
+
               <motion.p
                 className="text-center text-xs text-muted"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.85 }}
               >
-                Pas encore de compte ?{" "}
-                <Link href="/register" className="text-accent hover:underline">
-                  S&apos;inscrire
+                Déjà un compte ?{" "}
+                <Link href="/login" className="text-accent hover:underline">
+                  Se connecter
                 </Link>
               </motion.p>
             </motion.form>
