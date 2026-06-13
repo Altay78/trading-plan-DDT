@@ -1,9 +1,7 @@
 "use client";
 
 import { createClient } from "@supabase/supabase-js";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { SUPABASE_URL as url, SUPABASE_ANON_KEY as anon } from "./supabase";
 
 // Crée un compte membre via un client Supabase JETABLE :
 // la session du mentor n'est pas touchée (persistSession: false).
