@@ -112,9 +112,9 @@ export default function Home() {
             </p>
             <div className="mt-4 inline-flex items-center gap-2 text-xs text-accent">
               Vérifier un trade
-              <motion.span className="inline-block" aria-hidden whileHover={{ x: 0 }}>
+              <span className="inline-block transition-transform duration-200 group-hover:translate-x-1" aria-hidden>
                 →
-              </motion.span>
+              </span>
             </div>
           </Link>
         </StaggerChild>
@@ -341,8 +341,8 @@ function ForecastChart({ fc }: { fc: ReturnType<typeof simulateForecast> }) {
   const H = 170;
   const pad = 10;
   const eqTop = 10;
-  const eqBottom = 112;
-  const barCenter = 150;
+  const eqBottom = 108;
+  const barCenter = 142;
   const barMax = 22;
 
   const caps = [fc.start, ...fc.days.map((d) => d.capital)];

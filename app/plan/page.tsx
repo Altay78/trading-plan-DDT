@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ASSET_CATALOG,
   EMOTIONS,
@@ -14,21 +13,35 @@ import {
   type EntryConditionKey,
   type TradingPlan,
 } from "@/lib/plan";
-import { classifyRiskProfile, projectTrades } from "@/lib/calc";
+import {
+  breakEvenWinRate,
+  classifyRiskProfile,
+  projectTrades,
+  simulateForecast,
+  type Forecast,
+} from "@/lib/calc";
 import { usePlan } from "@/lib/usePlan";
 import { Badge, Chip, Field, NumberInput, Section } from "@/components/ui";
 import { Slider } from "@/components/Slider";
 import {
   EASE_OUT,
+  EASE_SOFT,
   springSnappy,
   springSoft,
   springBouncy,
   staggerContainer,
   staggerItem,
 } from "@/lib/motion";
-import { AnimatedNumber, MagneticButton } from "@/components/motion";
+import {
+  AnimatedNumber,
+  MagneticButton,
+  Reveal,
+  Stagger,
+  StaggerChild,
+} from "@/components/motion";
 
 const PROJECTION_TRADES = 30;
+const FORECAST_TRADES = 30;
 
 const STEPS = [
   { id: "capital", title: "Capital" },
@@ -52,18 +65,43 @@ const stepVariants = {
 };
 
 export default function PlanPage() {
-  const { plan, loaded, save, update, reset } = usePlan();
-  const router = useRouter();
+  const { plan, loaded, exists, save, update, reset } = usePlan();
   const [step, setStep] = useState(0);
   const [customInput, setCustomInput] = useState("");
   // Track navigation direction so the slide animation knows which way to go.
   const [direction, setDirection] = useState(1);
+  // Plan déjà établi → on affiche une vue d'ensemble en lecture ;
+  // "Modifier" rouvre le wizard d'édition.
+  const [forceEdit, setForceEdit] = useState(false);
   const goToStep = (next: number) => {
     setDirection(next >= step ? 1 : -1);
     setStep(next);
   };
 
   if (!loaded) return <p className="text-sm text-muted">Chargement…</p>;
+
+  const handleReset = () => {
+    if (confirm("Réinitialiser le plan et tout recommencer ?")) {
+      reset();
+      setStep(0);
+      setForceEdit(true);
+    }
+  };
+
+  // Vue d'ensemble du plan établi (lecture) tant qu'on ne clique pas "Modifier".
+  if (exists && !forceEdit) {
+    return (
+      <PlanOverview
+        plan={plan}
+        onEdit={() => {
+          setForceEdit(true);
+          setStep(0);
+          setDirection(1);
+        }}
+        onReset={handleReset}
+      />
+    );
+  }
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -99,17 +137,25 @@ export default function PlanPage() {
             Construis-le étape par étape. Tout est sauvegardé automatiquement.
           </p>
         </div>
-        <button
-          onClick={() => {
-            if (confirm("Réinitialiser le plan et tout recommencer ?")) {
-              reset();
-              setStep(0);
-            }
-          }}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition hover:text-danger"
-        >
-          Réinitialiser
-        </button>
+        <div className="flex items-center gap-2">
+          {exists && (
+            <button
+              onClick={() => {
+                setForceEdit(false);
+                setStep(0);
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition hover:text-foreground"
+            >
+              ← Vue d&apos;ensemble
+            </button>
+          )}
+          <button
+            onClick={handleReset}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition hover:text-danger"
+          >
+            Réinitialiser
+          </button>
+        </div>
       </div>
 
       {/* Progression */}
@@ -600,8 +646,9 @@ export default function PlanPage() {
         {isLast ? (
           <MagneticButton
             onClick={() => {
-              save(plan); // garantit la persistance du plan (exists = true)
-              router.push("/");
+              save(plan); // persiste le plan (exists = true)
+              setForceEdit(false); // affiche la vue d'ensemble du plan établi
+              setStep(0);
             }}
             className="btn-primary rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
           >
@@ -796,5 +843,406 @@ function Projection({ plan }: { plan: TradingPlan }) {
         (hors frais, spread et slippage), pas une garantie.
       </p>
     </Section>
+  );
+}
+
+/* ============================================================
+ * Vue d'ensemble du plan établi (mode lecture).
+ * Affiche toutes les règles, conditions et données + un forecast
+ * interactif sur 30 trades + la projection de rentabilité.
+ * ============================================================ */
+function PlanOverview({
+  plan,
+  onEdit,
+  onReset,
+}: {
+  plan: TradingPlan;
+  onEdit: () => void;
+  onReset: () => void;
+}) {
+  const profile = classifyRiskProfile(plan);
+  const tone = {
+    ok: "border-accent/40 bg-accent/10",
+    warn: "border-warning/40 bg-warning/10",
+    fail: "border-danger/40 bg-danger/10",
+  }[profile.tone];
+
+  const assets = plan.assets.filter(Boolean);
+  const sessions = SESSIONS.filter((s) => plan.sessions.includes(s.key));
+  const confirmations = [
+    ...ENTRY_CONDITIONS.filter((c) => plan.enabledConditions.includes(c.key)).map((c) => c.label),
+    ...plan.customConditions,
+  ];
+  const emotions = EMOTIONS.filter((e) => plan.blockingEmotions.includes(e));
+  const indices = WATCH_INDICES.filter((i) => plan.watchIndices.includes(i.key));
+
+  const pct = (n: number) => `${Number(n.toFixed(2))}%`;
+  const mmRows: { label: string; value: string }[] = [
+    { label: "Capital", value: `${plan.accountSize.toLocaleString("fr-FR")} ${plan.currency}` },
+    { label: "Risque / trade", value: pct(plan.riskPerTradePct) },
+    { label: "RR minimum", value: plan.minRiskReward.toFixed(1) },
+    { label: "Win rate attendu", value: `${plan.expectedWinRate}%` },
+    { label: "Trades / jour", value: `${plan.maxTradesPerDay} max` },
+    { label: "Gain max / jour", value: pct(plan.maxDailyGainPct) },
+    { label: "Perte max / jour", value: `-${pct(plan.maxDailyLossPct)}` },
+    { label: "Objectif / semaine", value: pct(plan.maxWeeklyGainPct) },
+    { label: "Perte max / semaine", value: `-${pct(plan.maxWeeklyLossPct)}` },
+    { label: "Objectif mensuel", value: pct(plan.monthlyTargetPct) },
+    { label: "Risque ouvert max", value: pct(plan.maxOpenRiskPct) },
+    { label: "Kill-switch (DD max)", value: `-${pct(plan.maxAccountDrawdownPct)}` },
+  ];
+
+  return (
+    <div className="space-y-6 animate-stagger">
+      {/* En-tête */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Mon plan de trading</h1>
+          <p className="mt-1 text-sm text-muted">
+            Ton plan est établi. Voici tes règles, ta projection et ton forecast.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onReset}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition hover:text-danger"
+          >
+            Réinitialiser
+          </button>
+          <MagneticButton
+            onClick={onEdit}
+            className="btn-primary rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
+          >
+            ✎ Modifier
+          </MagneticButton>
+        </div>
+      </div>
+
+      {/* Profil + money management */}
+      <Reveal as="section" className="card p-6 sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-accent">Règles & money management</p>
+            <h2 className="mt-1 text-lg font-semibold">{plan.memberName || "Le socle de ton plan"}</h2>
+          </div>
+          <Badge tone={profile.tone}>Profil {profile.label}</Badge>
+        </div>
+
+        <Stagger className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" stagger={0.03}>
+          {mmRows.map((r) => (
+            <StaggerChild key={r.label} className="rounded-xl border border-border bg-surface-2 p-3">
+              <div className="text-xs text-muted">{r.label}</div>
+              <div className="mt-0.5 text-sm font-semibold tabular-nums">{r.value}</div>
+            </StaggerChild>
+          ))}
+        </Stagger>
+
+        <motion.div
+          className={`mt-5 rounded-xl border p-4 ${tone}`}
+          initial={{ opacity: 0, y: 8 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={springSoft}
+        >
+          <p className="text-sm text-foreground">{profile.summary}</p>
+        </motion.div>
+      </Reveal>
+
+      {/* Forecast interactif — 30 trades */}
+      <TradesForecast plan={plan} />
+
+      {/* Projection & rentabilité (réutilise le composant existant) */}
+      <Reveal>
+        <Projection plan={plan} />
+      </Reveal>
+
+      {/* Conditions de trading */}
+      <Reveal as="section" className="card p-6 sm:p-8">
+        <h2 className="text-lg font-semibold">Conditions de trading</h2>
+        <div className="mt-4 space-y-5">
+          <ChipGroup label="États bloquants (psycho)" items={emotions} tone="danger" empty="aucun" />
+          <ChipGroup
+            label={`Confirmations exigées — min. ${plan.minConfluences}`}
+            items={confirmations}
+            tone="accent"
+            empty="aucune"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted">Sessions :</span>
+            {sessions.length ? (
+              sessions.map((s) => (
+                <span key={s.key} className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs">
+                  {s.label} <span className="opacity-60">· {s.window}</span>
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-muted">aucune</span>
+            )}
+            <span className="ml-1 text-xs text-muted">· filtre news ±{plan.newsFilterMinutes} min</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted">Actifs :</span>
+            {assets.length ? (
+              assets.map((a) => (
+                <span key={a} className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">
+                  {a}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-muted">aucun</span>
+            )}
+            {indices.length > 0 && (
+              <>
+                <span className="ml-2 text-xs font-medium text-muted">Indices :</span>
+                {indices.map((i) => (
+                  <span key={i.key} className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs">
+                    {i.key}
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </Reveal>
+    </div>
+  );
+}
+
+function ChipGroup({
+  label,
+  items,
+  tone,
+  empty,
+}: {
+  label: string;
+  items: string[];
+  tone: "accent" | "danger";
+  empty: string;
+}) {
+  const cls =
+    tone === "danger"
+      ? "border-danger/40 bg-danger/10 text-danger"
+      : "border-accent/40 bg-accent/10 text-accent";
+  return (
+    <div>
+      <div className="mb-2 text-xs font-medium text-muted">{label}</div>
+      {items.length ? (
+        <div className="flex flex-wrap gap-2">
+          {items.map((it) => (
+            <span key={it} className={`rounded-full border px-3 py-1 text-xs font-medium ${cls}`}>
+              {it}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-muted">{empty}</span>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+ * Forecast interactif sur 30 trades.
+ * Win rate par défaut à 50 % ; les gains/pertes se recalculent en live.
+ * ============================================================ */
+function TradesForecast({ plan }: { plan: TradingPlan }) {
+  const reduce = useReducedMotion();
+  const [winRate, setWinRate] = useState(50);
+  const fc = useMemo(
+    () => simulateForecast(plan, winRate, FORECAST_TRADES),
+    [plan, winRate],
+  );
+  const be = breakEvenWinRate(plan.minRiskReward);
+  const up = fc.pnl >= 0;
+
+  return (
+    <Reveal as="section" className="card p-6 sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Forecast — {FORECAST_TRADES} trades</h2>
+          <p className="mt-1 max-w-md text-sm text-muted">
+            Simulation à risque composé. Fais varier le win rate : les gains et les
+            pertes s&apos;ajustent en direct.
+          </p>
+        </div>
+        <div className="text-right">
+          <AnimatedNumber
+            key={up ? "up" : "down"}
+            value={Math.round(fc.finalCapital)}
+            suffix={` ${plan.currency}`}
+            className={`block text-2xl font-semibold tabular-nums ${up ? "text-accent" : "text-danger"}`}
+          />
+          <div className={`text-xs tabular-nums ${up ? "text-accent" : "text-danger"}`}>
+            {up ? "+" : "−"}
+            {Math.abs(Math.round(fc.pnl)).toLocaleString("fr-FR")} {plan.currency} · {up ? "+" : "−"}
+            {Math.abs(fc.pnlPct).toFixed(1)}%
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 max-w-sm">
+        <div className="mb-1 flex items-center justify-between text-sm">
+          <span className="font-medium">Win rate simulé</span>
+          {be !== null && (
+            <span className="text-xs text-muted">
+              seuil de rentabilité ≈ {Math.round(be * 100)}%
+            </span>
+          )}
+        </div>
+        <Slider
+          value={winRate}
+          min={10}
+          max={90}
+          step={1}
+          format={(v) => `${v}%`}
+          onChange={setWinRate}
+        />
+      </div>
+
+      <div className="mt-5">
+        <ForecastMiniChart fc={fc} reduce={reduce} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <FcTile label="Trades gagnants" tone="ok">
+          <AnimatedNumber value={fc.wins} locale="" />
+        </FcTile>
+        <FcTile label="Trades perdants" tone="fail">
+          <AnimatedNumber value={fc.losses} locale="" />
+        </FcTile>
+        <FcTile label="Drawdown max" tone="fail">
+          <AnimatedNumber value={fc.maxDrawdownPct} decimals={1} prefix="-" suffix="%" />
+        </FcTile>
+        <FcTile label="Win rate simulé">
+          <AnimatedNumber value={winRate} suffix="%" locale="" />
+        </FcTile>
+      </div>
+
+      <p className="mt-3 text-xs text-muted">
+        Départ {plan.accountSize.toLocaleString("fr-FR")} {plan.currency}, RR {plan.minRiskReward},
+        risque {plan.riskPerTradePct}% par trade. Séquence simulée — l&apos;ordre réel varie,
+        le résultat attendu reste cohérent.
+      </p>
+    </Reveal>
+  );
+}
+
+function FcTile({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone?: "ok" | "fail";
+  children: React.ReactNode;
+}) {
+  const color = tone === "ok" ? "text-accent" : tone === "fail" ? "text-danger" : "text-foreground";
+  return (
+    <div className="rounded-xl border border-border bg-surface-2 p-3">
+      <div className="text-xs text-muted">{label}</div>
+      <div className={`mt-0.5 block text-sm font-semibold tabular-nums ${color}`}>{children}</div>
+    </div>
+  );
+}
+
+// Courbe d'équité + barres de gains/pertes sur l'horizon du forecast.
+// Le tracé se redessine quand le win rate change (clé dérivée de la forme).
+function ForecastMiniChart({ fc, reduce }: { fc: Forecast; reduce: boolean | null }) {
+  const W = 600;
+  const H = 170;
+  const pad = 10;
+  const eqTop = 12;
+  const eqBottom = 104;
+  const barCenter = 140;
+  const barMax = 22;
+
+  const caps = [fc.start, ...fc.days.map((d) => d.capital)];
+  const minCap = Math.min(...caps);
+  const maxCap = Math.max(...caps);
+  const capRange = maxCap - minCap || 1;
+  const n = caps.length;
+  const x = (i: number) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const yEq = (v: number) => eqBottom - ((v - minCap) / capRange) * (eqBottom - eqTop);
+
+  const line = caps
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${yEq(v).toFixed(1)}`)
+    .join(" ");
+  const area = `${line} L ${x(n - 1).toFixed(1)} ${eqBottom} L ${x(0).toFixed(1)} ${eqBottom} Z`;
+  const up = fc.pnl >= 0;
+  const stroke = up ? "var(--accent)" : "var(--danger)";
+
+  const maxAbsPnl = Math.max(...fc.days.map((d) => Math.abs(d.pnl)), 1);
+  const barW = ((W - 2 * pad) / fc.days.length) * 0.55;
+  const drawKey = `${up ? "u" : "d"}-${fc.wins}-${minCap.toFixed(0)}-${maxCap.toFixed(0)}`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="fcMiniArea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1={pad} x2={W - pad} y1={yEq(fc.start)} y2={yEq(fc.start)} stroke="var(--border)" strokeDasharray="3 4" />
+
+      <motion.path
+        key={`area-${drawKey}`}
+        d={area}
+        fill="url(#fcMiniArea)"
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.3 }}
+      />
+      <motion.path
+        key={`line-${drawKey}`}
+        d={line}
+        pathLength={1}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={2.2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        initial={reduce ? false : { pathLength: 0, opacity: 0.4 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={{
+          pathLength: { duration: 0.9, ease: EASE_SOFT },
+          opacity: { duration: 0.25, ease: EASE_OUT },
+        }}
+      />
+      <motion.circle
+        key={`dot-${drawKey}`}
+        cx={x(n - 1)}
+        cy={yEq(caps[n - 1])}
+        r={3.5}
+        fill={stroke}
+        initial={reduce ? false : { opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ ...springSnappy, delay: 0.85 }}
+        style={{ transformOrigin: `${x(n - 1)}px ${yEq(caps[n - 1])}px` }}
+      />
+
+      {fc.days.map((d, i) => {
+        const h = (Math.abs(d.pnl) / maxAbsPnl) * barMax;
+        const cx = x(i + 1);
+        const barH = Math.max(1, h);
+        const y = d.win ? barCenter - barH : barCenter;
+        return (
+          <motion.rect
+            key={i}
+            x={cx - barW / 2}
+            y={y}
+            width={barW}
+            height={barH}
+            rx={1}
+            fill={d.win ? "var(--accent)" : "var(--danger)"}
+            initial={reduce ? false : { opacity: 0, scaleY: 0 }}
+            animate={{ opacity: 1, scaleY: 1 }}
+            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.4 + i * 0.012 }}
+            style={{ transformOrigin: `${cx}px ${barCenter}px` }}
+          />
+        );
+      })}
+      <line x1={pad} x2={W - pad} y1={barCenter} y2={barCenter} stroke="var(--border)" />
+    </svg>
   );
 }
